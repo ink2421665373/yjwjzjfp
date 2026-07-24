@@ -1,0 +1,23 @@
+{
+  "name": "yjwj",
+  "version": "1.0.0",
+  "description": "永劫无间队友分配网站",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "autoprefixer": "^10.5.0",
+    "axios": "^1.18.0",
+    "postcss": "^8.5.15",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwindcss": "^3.4.19"
+  },
+  "devDependencies": {
+    "vite": "^8.0.16"
+  }
+}
