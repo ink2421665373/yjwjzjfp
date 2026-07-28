@@ -104,6 +104,9 @@ function authenticateToken(req, res, next) {
     req.user = user
     next()
   } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ code: 'TOKEN_EXPIRED', error: 'Token expired' })
+    }
     return res.status(403).json({ error: 'Invalid token' })
   }
 }
@@ -128,7 +131,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' })
   }
   
-  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY)
+  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY, { expiresIn: '24h' })
   res.json({ token, user: { username: user.username, role: user.role } })
 })
 
