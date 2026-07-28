@@ -1,13 +1,33 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
-function TeamPanel({ players, groups, onAllocate, isAdmin, onRemovePlayer }) {
-  const [teams, setTeams] = useState([
-    { id: 1, name: '甲队', players: [], customScore: 0 },
-    { id: 2, name: '乙队', players: [], customScore: 0 },
-    { id: 3, name: '丙队', players: [], customScore: 0 }
-  ])
+const STORAGE_KEY = 'naraka_teams'
+
+function TeamPanel({ players, groups, isAdmin, onRemovePlayer }) {
+  const [teams, setTeams] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {
+        return [
+          { id: 1, name: '队伍1', players: [], customScore: 0 },
+          { id: 2, name: '队伍2', players: [], customScore: 0 },
+          { id: 3, name: '队伍3', players: [], customScore: 0 }
+        ]
+      }
+    }
+    return [
+      { id: 1, name: '队伍1', players: [], customScore: 0 },
+      { id: 2, name: '队伍2', players: [], customScore: 0 },
+      { id: 3, name: '队伍3', players: [], customScore: 0 }
+    ]
+  })
   const [editingTeamId, setEditingTeamId] = useState(null)
   const [editName, setEditName] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(teams))
+  }, [teams])
 
   const availablePlayers = players.concat(groups.flatMap(g => g.players || []))
 
@@ -58,8 +78,7 @@ function TeamPanel({ players, groups, onAllocate, isAdmin, onRemovePlayer }) {
 
   const handleAddTeam = () => {
     const newId = Math.max(...teams.map(t => t.id)) + 1
-    const teamNames = ['甲队', '乙队', '丙队', '丁队', '戊队', '己队', '庚队', '辛队', '壬队', '癸队']
-    setTeams(prev => [...prev, { id: newId, name: teamNames[(newId - 1) % teamNames.length], players: [], customScore: 0 }])
+    setTeams(prev => [...prev, { id: newId, name: `队伍${newId}`, players: [], customScore: 0 }])
   }
 
   const handleRemoveTeam = (teamId) => {
@@ -75,20 +94,11 @@ function TeamPanel({ players, groups, onAllocate, isAdmin, onRemovePlayer }) {
     setTeams(prev => prev.filter(t => t.id !== teamId))
   }
 
-  const handleConfirmAllocation = () => {
-    const validTeams = teams.filter(t => t.players.length > 0 || t.customScore > 0)
-    if (validTeams.length === 0) {
-      alert('请先分配玩家到队伍或设置分数！')
-      return
-    }
-    onAllocate(validTeams)
-  }
-
   const handleClearTeams = () => {
     setTeams([
-      { id: 1, name: '甲队', players: [], customScore: 0 },
-      { id: 2, name: '乙队', players: [], customScore: 0 },
-      { id: 3, name: '丙队', players: [], customScore: 0 }
+      { id: 1, name: '队伍1', players: [], customScore: 0 },
+      { id: 2, name: '队伍2', players: [], customScore: 0 },
+      { id: 3, name: '队伍3', players: [], customScore: 0 }
     ])
   }
 
@@ -146,16 +156,6 @@ function TeamPanel({ players, groups, onAllocate, isAdmin, onRemovePlayer }) {
         </div>
       </div>
 
-      <div className="mb-5">
-        <button
-          onClick={handleConfirmAllocation}
-          className="btn-primary w-full py-3 text-base flex items-center justify-center gap-2"
-        >
-          <span>✅</span>
-          确认分队
-        </button>
-      </div>
-
       {teamRankings.length > 0 && (
         <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 animate-scale-in">
           <h3 className="text-slate-800 font-semibold mb-3 flex items-center gap-2">
@@ -209,7 +209,7 @@ function TeamPanel({ players, groups, onAllocate, isAdmin, onRemovePlayer }) {
                         onClick={() => handleAddToTeam(player, team.id)}
                         className={`px-2.5 py-1 text-xs font-medium text-white rounded-lg bg-gradient-to-r ${getTeamColor(idx)} hover:opacity-90 transition-all hover:scale-105 shadow-sm`}
                       >
-                        +{team.name.charAt(0)}
+                        +{team.name}
                       </button>
                     ))}
                     {isAdmin && onRemovePlayer && (
@@ -283,7 +283,7 @@ function TeamPanel({ players, groups, onAllocate, isAdmin, onRemovePlayer }) {
                         </div>
                       )}
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-1.5 border border-slate-200/60">
+                        <div className="flex flex-col items-center bg-slate-50 rounded-lg px-3 py-1.5 border border-slate-200/60">
                           <span className="text-slate-500 text-xs">自定义分</span>
                           <input
                             type="number"
@@ -294,6 +294,10 @@ function TeamPanel({ players, groups, onAllocate, isAdmin, onRemovePlayer }) {
                             min="0"
                             step="0.1"
                           />
+                        </div>
+                        <div className="flex flex-col items-center bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg px-3 py-1.5 border border-amber-200/60">
+                          <span className="text-amber-600 text-xs">组内总和</span>
+                          <span className="text-amber-700 text-sm font-semibold">{groupScoreSum}</span>
                         </div>
                         {isAdmin && (
                           <>

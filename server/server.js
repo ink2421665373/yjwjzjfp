@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿const express = require('express')
+const express = require('express')
 const cors = require('cors')
 const Database = require('better-sqlite3')
 const bcrypt = require('bcryptjs')
@@ -71,9 +71,9 @@ function initDatabase() {
 
   const groupCount = db.prepare('SELECT COUNT(*) as count FROM groups').get().count
   if (groupCount === 0) {
-    db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('1组', 0)
-    db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('2组', 0)
-    db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('3组', 0)
+    db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('1组', 1)
+    db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('2组', 2)
+    db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('3组', 3)
     console.log('Default groups created')
   }
 
@@ -180,7 +180,10 @@ app.get('/api/groups', authenticateToken, (req, res) => {
 app.post('/api/groups', authenticateToken, requireAdmin, (req, res) => {
   const { name, customScore } = req.body
   
-  const info = db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run(name, customScore || 0)
+  const groupCount = db.prepare('SELECT COUNT(*) as count FROM groups').get().count
+  const score = customScore !== undefined ? customScore : (groupCount + 1)
+  
+  const info = db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run(name, score)
   const row = db.prepare('SELECT * FROM groups WHERE id = ?').get(info.lastInsertRowid)
   
   res.json({ ...row, playerIds: [] })
@@ -279,6 +282,58 @@ app.post('/api/score-config', authenticateToken, requireAdmin, (req, res) => {
   
   Object.keys(config).forEach(key => {
     db.prepare('INSERT OR REPLACE INTO score_config (key, value) VALUES (?, ?)').run(key, JSON.stringify(config[key]))
+  })
+  
+  res.json({ success: true })
+})
+
+app.post('/api/clear-all-data', authenticateToken, requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM group_players').run()
+  db.prepare('DELETE FROM players').run()
+  db.prepare('DELETE FROM groups').run()
+  db.prepare('DELETE FROM announcements').run()
+  
+  db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('1组', 1)
+  db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('2组', 2)
+  db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run('3组', 3)
+  
+  db.prepare('INSERT INTO announcements (title, content, author, pinned) VALUES (?, ?, ?, ?)').run(
+    '欢迎使用队友分配系统', '本系统可以帮助您根据天选三排数据智能分配队友，确保各队实力均衡。', '管理员', 1
+  )
+  db.prepare('INSERT INTO announcements (title, content, author, pinned) VALUES (?, ?, ?, ?)').run(
+    '使用提示', '分组：用于区分玩家实力等级；分队：用于实际匹配队伍。添加玩家后先分组再分队。', '管理员', 0
+  )
+  db.prepare('INSERT INTO announcements (title, content, author, pinned) VALUES (?, ?, ?, ?)').run(
+    '权限说明', '管理员可以添加/修改/删除玩家和公告，普通用户只能查看。', '管理员', 0
+  )
+  
+  res.json({ success: true })
+})
+
+app.post('/api/import-groups', authenticateToken, requireAdmin, (req, res) => {
+  const groups = req.body
+  
+  db.prepare('DELETE FROM group_players').run()
+  db.prepare('DELETE FROM players').run()
+  db.prepare('DELETE FROM groups').run()
+  
+  groups.forEach((group, index) => {
+    const groupInfo = db.prepare('INSERT INTO groups (name, customScore) VALUES (?, ?)').run(
+      group.name, group.customScore || 0
+    )
+    const groupId = groupInfo.lastInsertRowid
+    
+    if (group.players && Array.isArray(group.players)) {
+      group.players.forEach(player => {
+        const playerInfo = db.prepare('INSERT INTO players (playerName, nickname) VALUES (?, ?)').run(
+          player.playerName || player.nickname || '',
+          player.nickname || player.playerName || ''
+        )
+        const playerId = playerInfo.lastInsertRowid
+        
+        db.prepare('INSERT INTO group_players (groupId, playerId) VALUES (?, ?)').run(groupId, playerId)
+      })
+    }
   })
   
   res.json({ success: true })

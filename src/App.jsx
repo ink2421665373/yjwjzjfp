@@ -9,7 +9,7 @@ import LoginModal from './components/LoginModal'
 import ParticleBackground from './components/ParticleBackground'
 import UserSettings from './components/UserSettings'
 
-import { login as apiLogin, getPlayers, addPlayer, deletePlayer, getGroups, addGroup, updateGroup, deleteGroup, addPlayerToGroup, removePlayerFromGroup, getAnnouncements, addAnnouncement, updateAnnouncement, deleteAnnouncement, clearAllData } from './api/backend'
+import { login as apiLogin, getPlayers, addPlayer, deletePlayer, getGroups, addGroup, updateGroup, deleteGroup, addPlayerToGroup, removePlayerFromGroup, getAnnouncements, addAnnouncement, updateAnnouncement, deleteAnnouncement, clearAllData, importGroups } from './api/backend'
 
 function loadUser() {
   try {
@@ -80,7 +80,7 @@ function App() {
           
           const groupsWithPlayers = groupsData.map(group => ({
             ...group,
-            players: playersData.filter(p => group.playerIds.includes(p.id))
+            players: playersData.filter(p => group.playerIds.includes(p.id)).map(p => ({ ...p, sourceGroupId: group.id }))
           }))
           const ungroupedPlayers = playersData.filter(p => !groupsData.some(g => g.playerIds.includes(p.id)))
           
@@ -385,30 +385,39 @@ function App() {
     let csvContent = ''
     let filename = ''
     
-    if (type === 'players') {
-      const allPlayers = [...players, ...powerGroups.flatMap(g => g.players)]
-      csvContent = '\uFEFF角色名,昵称,玩家ID,分组\n'
-      allPlayers.forEach(player => {
-        const group = powerGroups.find(g => g.players.some(p => p.id === player.id))
+    if (type === 'teams') {
+      const teams = JSON.parse(localStorage.getItem('naraka_teams') || '[]')
+      const maxPlayers = Math.max(...teams.map(t => t.players.length), 1)
+      const headers = ['队伍名称', '自定义分', '组内总和', ...Array.from({ length: maxPlayers }, (_, i) => `玩家${i + 1}`)]
+      csvContent = '\uFEFF' + headers.join(',') + '\n'
+      teams.forEach(team => {
+        const groupScoreSum = team.players.reduce((sum, player) => {
+          if (player.sourceGroupId) {
+            const group = powerGroups.find(g => g.id === player.sourceGroupId)
+            return sum + (group?.customScore || 0)
+          }
+          return sum
+        }, 0)
         const row = [
-          `"${player.playerName}"`,
-          `"${player.nickname}"`,
-          `"${player.playerId || '-'}"`,
-          `"${group?.name || '未分组'}"`
+          `"${team.name}"`,
+          `"${team.customScore || 0}"`,
+          `"${groupScoreSum}"`,
+          ...team.players.map(p => `"${p.nickname}"`)
         ]
         csvContent += row.join(',') + '\n'
       })
-      filename = `玩家数据_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`
+      filename = `分队数据_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`
     } else if (type === 'groups') {
-      csvContent = '\uFEFF分组名称,玩家昵称\n'
+      const maxPlayers = Math.max(...powerGroups.map(g => g.players.length), 1)
+      const headers = ['分组名称', '组分数', ...Array.from({ length: maxPlayers }, (_, i) => `玩家${i + 1}`)]
+      csvContent = '\uFEFF' + headers.join(',') + '\n'
       powerGroups.forEach(group => {
-        group.players.forEach(player => {
-          const row = [
-            `"${group.name}"`,
-            `"${player.nickname}"`
-          ]
-          csvContent += row.join(',') + '\n'
-        })
+        const row = [
+          `"${group.name}"`,
+          `"${group.customScore || 0}"`,
+          ...group.players.map(p => `"${p.nickname}"`)
+        ]
+        csvContent += row.join(',') + '\n'
       })
       filename = `分组数据_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`
     }
@@ -421,6 +430,80 @@ function App() {
     link.click()
     document.body.removeChild(link)
     showSaveMessage('✅ 数据导出成功')
+  }
+
+  const handleImportGroups = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const rows = text.split('\n').filter(row => row.trim())
+      if (rows.length < 2) {
+        alert('CSV文件格式不正确')
+        return
+      }
+
+      const headers = rows[0].split(',').map(h => h.trim().replace(/['"]/g, ''))
+      const groupNameIndex = headers.indexOf('分组名称')
+      const groupScoreIndex = headers.indexOf('组分数')
+      
+      if (groupNameIndex === -1) {
+        alert('CSV文件缺少"分组名称"列')
+        return
+      }
+
+      const groupsData = []
+      for (let i = 1; i < rows.length; i++) {
+        const row = parseCSVRow(rows[i])
+        const groupName = row[groupNameIndex]?.trim().replace(/['"]/g, '')
+        const groupScore = groupScoreIndex >= 0 ? parseFloat(row[groupScoreIndex]?.trim()) || 0 : 0
+        const players = row.slice(Math.max(groupNameIndex, groupScoreIndex) + 1).filter(p => p?.trim())
+        
+        if (groupName) {
+          groupsData.push({
+            name: groupName,
+            customScore: groupScore,
+            players: players.map(name => ({
+              nickname: name.trim().replace(/['"]/g, ''),
+              playerName: name.trim().replace(/['"]/g, ''),
+              id: Date.now() + i + Math.random()
+            }))
+          })
+        }
+      }
+
+      await importGroups(groupsData)
+      loadData()
+      showSaveMessage('✅ 分组数据导入成功')
+    } catch (error) {
+      console.error('Import failed:', error)
+      alert('导入失败：' + error.message)
+    }
+    
+    e.target.value = ''
+  }
+
+  const parseCSVRow = (row) => {
+    const result = []
+    let current = ''
+    let inQuotes = false
+    
+    for (let i = 0; i < row.length; i++) {
+      const char = row[i]
+      
+      if (char === '"') {
+        inQuotes = !inQuotes
+      } else if (char === ',' && !inQuotes) {
+        result.push(current)
+        current = ''
+      } else {
+        current += char
+      }
+    }
+    result.push(current)
+    
+    return result
   }
 
   const allPlayers = [...players, ...powerGroups.flatMap(g => g.players)]
@@ -467,19 +550,24 @@ function App() {
           
           <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-slate-200/60">
             <button
-              onClick={() => exportToCSV('players')}
+              onClick={() => exportToCSV('teams')}
               className="btn-secondary text-sm py-2 px-4 flex items-center gap-2"
             >
-              <span>📥</span>
-              导出玩家数据
+              <span>📤</span>
+              导出分队数据
             </button>
             <button
               onClick={() => exportToCSV('groups')}
               className="btn-secondary text-sm py-2 px-4 flex items-center gap-2"
             >
-              <span>📊</span>
+              <span>📥</span>
               导出分组数据
             </button>
+            <label className="btn-secondary text-sm py-2 px-4 flex items-center gap-2 cursor-pointer">
+              <span>📥</span>
+              导入分组数据
+              <input type="file" accept=".csv" onChange={handleImportGroups} className="hidden" />
+            </label>
             {isAdmin && (
               <button
                 onClick={handleClearAllData}
@@ -577,7 +665,6 @@ function App() {
                 <TeamPanel
                   players={players}
                   groups={powerGroups}
-                  onAllocate={handleAllocate}
                   isAdmin={isAdmin}
                   onRemovePlayer={handleRemovePlayer}
                 />

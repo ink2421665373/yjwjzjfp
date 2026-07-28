@@ -163,3 +163,8 @@ export const clearAllData = async () => {
   const response = await backendApi.post('/clear-all-data')
   return response.data
 }
+
+export const importGroups = async (groupsData) => {
+  const response = await backendApi.post('/import-groups', groupsData)
+  return response.data
+}
