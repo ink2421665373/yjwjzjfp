@@ -18,6 +18,7 @@ backendApi.interceptors.request.use((config) => {
 })
 
 let isRefreshing = false
+let isAuthFailed = false
 
 backendApi.interceptors.response.use((response) => {
   return response
@@ -25,9 +26,14 @@ backendApi.interceptors.response.use((response) => {
   const status = error.response?.status
   const code = error.response?.data?.code
   
+  if (isAuthFailed) {
+    return Promise.reject(new Error('认证已失败'))
+  }
+  
   if (status === 401 && code === 'TOKEN_EXPIRED') {
     if (!isRefreshing) {
       isRefreshing = true
+      isAuthFailed = true
       localStorage.removeItem('naraka_token')
       localStorage.removeItem('naraka_user')
       
@@ -38,6 +44,7 @@ backendApi.interceptors.response.use((response) => {
       
       setTimeout(() => {
         isRefreshing = false
+        isAuthFailed = false
         window.location.href = '/'
       }, 1000)
     }
@@ -47,11 +54,13 @@ backendApi.interceptors.response.use((response) => {
   if (status === 401 || status === 403) {
     if (!isRefreshing) {
       isRefreshing = true
+      isAuthFailed = true
       localStorage.removeItem('naraka_token')
       localStorage.removeItem('naraka_user')
       
       setTimeout(() => {
         isRefreshing = false
+        isAuthFailed = false
         window.location.href = '/'
       }, 1000)
     }

@@ -24,8 +24,6 @@ function loadUser() {
 }
 
 function App() {
-  const savedUser = loadUser()
-  
   const [players, setPlayers] = useState([])
   const [teams, setTeams] = useState([])
   
@@ -63,14 +61,28 @@ function App() {
     }
   ])
   const [saveStatus, setSaveStatus] = useState('')
-  const [currentUser, setCurrentUser] = useState(savedUser || null)
-  const [showLogin, setShowLogin] = useState(!savedUser)
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('naraka_user')
+      return saved ? JSON.parse(saved) : null
+    } catch (e) {
+      return null
+    }
+  })
+  const [showLogin, setShowLogin] = useState(() => {
+    try {
+      const saved = localStorage.getItem('naraka_user')
+      return !saved
+    } catch (e) {
+      return true
+    }
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
-      if (savedUser) {
+      if (currentUser) {
         try {
           const [playersData, groupsData, announcementsData] = await Promise.all([
             getPlayers(),
@@ -106,7 +118,7 @@ function App() {
     return () => {
       window.removeEventListener('tokenExpired', handleTokenExpired)
     }
-  }, [savedUser])
+  }, [])
 
   const isAdmin = currentUser?.role === 'admin'
 
